@@ -24,12 +24,12 @@ const users = {
   "userRandomID": {
     id: "userRandomID", 
     email: "user@example.com", 
-    password: "purple-monkey-dinosaur"
+    password: "123"
   },
  "user2RandomID": {
     id: "user2RandomID", 
     email: "user2@example.com", 
-    password: "dishwasher-funk"
+    password: "123"
   }
 }
 
@@ -47,7 +47,14 @@ const generateRandomString = () => {
   return randomString;
 };
 
-
+const getUserInfoByEmail = (email, userDatabase) => {
+  for (const user in userDatabase) {
+    if (userDatabase[user].email === email) {
+      return userDatabase[user];
+    }
+  }
+  return undefined;
+}
 
 
 
@@ -114,10 +121,12 @@ app.post('/urls/:id', (req, res) => {
 
 app.post('/login', (req, res) => {
   const email = req.body.email;
-  const password = req.body.password;
-  if (!email || !password) {
-    return res.status(404).send('Please enter your email and password.');
+ 
+  const user = getUserInfoByEmail(email, users);
+  if (!user) {
+    return res.status(403).send('Please enter your email and password.');
   }
+
   res.redirect('/urls');
 });
 
