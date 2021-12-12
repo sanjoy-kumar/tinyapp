@@ -1,10 +1,14 @@
 const express = require("express");
 const app = express();
 const PORT = 8080; // default port 8080
+const cookieParser = require('cookie-parser')
+
+
 
 
 const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({extended: true}));
+app.use(cookieParser());
 
 app.set("view engine", "ejs");
 
@@ -53,6 +57,11 @@ app.get("/u/:shortURL", (req, res) => {
   res.redirect(longURL);
 });
 
+//Login page that allows users to sign into their account
+
+app.get('/login', (req, res) => {
+  res.status(200).render('urls_login');
+});
 
 
 
@@ -83,6 +92,20 @@ app.post('/urls/:id', (req, res) => {
   res.redirect('/urls');
 });
 
+// login
+
+app.post('/login', (req, res) => {
+  
+
+    if (verifiedUser) {
+
+      req.session.userid = verifiedUser;
+      res.status(301).redirect('/urls');
+    } else {
+      req.flash('error', 'Username and Password do not match. Please try again.')
+      res.status(301).redirect('/login')
+    }
+});
 
 
 
