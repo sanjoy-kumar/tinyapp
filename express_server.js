@@ -63,7 +63,9 @@ app.get('/login', (req, res) => {
   res.status(200).render('urls_login');
 });
 
-
+app.get('/register', (req, res) => {
+    res.render('urls_register');
+});
 
 // ------------------ Add POST Route --------------------------------
 
@@ -95,7 +97,7 @@ app.post('/urls/:id', (req, res) => {
 // login
 
 app.post('/login', (req, res) => {
-  
+  const user = req.cookies[]
 
     if (verifiedUser) {
 
@@ -105,6 +107,10 @@ app.post('/login', (req, res) => {
       req.flash('error', 'Username and Password do not match. Please try again.')
       res.status(301).redirect('/login')
     }
+});
+
+app.post('/register', (req, res) => {
+  res.status(404).send('404!!! Opps!!!');
 });
 
 
