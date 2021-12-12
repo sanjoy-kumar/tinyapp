@@ -18,6 +18,22 @@ const urlDatabase = {
   "9sm5xK": "http://www.google.com"
 };
 
+
+
+const users = { 
+  "userRandomID": {
+    id: "userRandomID", 
+    email: "user@example.com", 
+    password: "purple-monkey-dinosaur"
+  },
+ "user2RandomID": {
+    id: "user2RandomID", 
+    email: "user2@example.com", 
+    password: "dishwasher-funk"
+  }
+}
+
+
 // ----------------------------Helper Functions -------------------------
 
 const generateRandomString = () => {
@@ -97,16 +113,12 @@ app.post('/urls/:id', (req, res) => {
 // login
 
 app.post('/login', (req, res) => {
-  const user = req.cookies[]
-
-    if (verifiedUser) {
-
-      req.session.userid = verifiedUser;
-      res.status(301).redirect('/urls');
-    } else {
-      req.flash('error', 'Username and Password do not match. Please try again.')
-      res.status(301).redirect('/login')
-    }
+  const email = req.body.email;
+  const password = req.body.password;
+  if (!email || !password) {
+    return res.status(404).send('Please enter your email and password.');
+  }
+  res.redirect('/urls');
 });
 
 app.post('/register', (req, res) => {
