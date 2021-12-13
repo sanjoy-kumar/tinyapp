@@ -1,138 +1,210 @@
-const express = require("express");
+const express = require('express');
 const app = express();
-const PORT = 8080; // default port 8080
-const cookieParser = require('cookie-parser')
+const PORT = 8080;
+const cookieSession = require('cookie-session');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 
-
-
-
-const bodyParser = require("body-parser");
 app.use(bodyParser.urlencoded({extended: true}));
-app.use(cookieParser());
-
-app.set("view engine", "ejs");
-
-
-const urlDatabase = {
-  "b2xVn2": "http://www.lighthouselabs.ca",
-  "9sm5xK": "http://www.google.com"
-};
+app.use(cookieSession({name: 'session', secret: 'grey-rose-juggling-volcanoes'}));
+app.set('view engine', 'ejs');
 
 
+//------------------ variables-------------------------------------------------
 
-const users = { 
-  "userRandomID": {
-    id: "userRandomID", 
-    email: "user@example.com", 
-    password: "123"
-  },
- "user2RandomID": {
-    id: "user2RandomID", 
-    email: "user2@example.com", 
-    password: "123"
+const urlDatabase = {};
+const users = {};
+
+
+//-----------------  Helper functions Calling-----------------------------------
+
+const { getUserByEmail, generateRandomString, urlsForUser } = require('./helpers');
+
+//------------------------------------------------------------------------------
+// ------------------- GET Routing - -------------------------------------------
+//------------------------------------------------------------------------------
+
+// GET Home
+
+app.get('/', (req, res) => {
+  if (req.session.userID) {
+    res.redirect('/urls');
+  } else {
+    res.redirect('/login');
   }
-}
+});
 
 
-// ----------------------------Helper Functions -------------------------
-
-const generateRandomString = () => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let randomString = '';
-  
-  while (randomString.length < 6) {
-    randomString += chars[Math.floor(Math.random() * chars.length)];
-  }
-
-  return randomString;
-};
-
-const getUserInfoByEmail = (email, userDatabase) => {
-  for (const user in userDatabase) {
-    if (userDatabase[user].email === email) {
-      return userDatabase[user];
-    }
-  }
-  return undefined;
-}
-
-
-
-// ------------------- Add GET Route ----------------------------------------
+//GET urls
 
 app.get("/urls", (req, res) => {
-  const templateVars = { urls: urlDatabase };
-  res.render("urls_index", templateVars);
+  const userID = req.session.userID;
+  const userUrls = urlsForUser(userID, urlDatabase);
+  const templateVars = { urls: userUrls, user: users[userID] };
+  
+  if (!userID) {
+    res.statusCode = 401;
+  }
+  
+  res.render('urls_index', templateVars);
+
 });
+
+// GET New URL
 
 app.get("/urls/new", (req, res) => {
-  res.render("urls_new");
+  if (req.session.userID) {
+    const templateVars = {user: users[req.session.userID]};
+    res.render('urls_new', templateVars);
+  } else {
+    res.redirect('/login');
+  }
 });
+
+// GET shortURL
 
 app.get("/urls/:shortURL", (req, res) => {
-  const templateVars = { shortURL: req.params.shortURL, longURL: urlDatabase[req.params.shortURL] };
-  res.render("urls_show", templateVars);
+  const shortURL = req.params.shortURL;
+  const userID = req.session.userID;
+  const userUrls = urlsForUser(userID, urlDatabase);
+  const templateVars = { urlDatabase, userUrls, shortURL, user: users[userID] };
+
+  if (!urlDatabase[shortURL]) {
+    const errorMessage = 'This short URL does not exist.';
+    res.status(404).render('urls_error', {user: users[userID], errorMessage});
+  } else if (!userID || !userUrls[shortURL]) {
+    const errorMessage = 'You are not authorized to see this URL.';
+    res.status(401).render('urls_error', {user: users[userID], errorMessage});
+  } else {
+    res.render('urls_show', templateVars);
+  }
 });
 
+// GET shortURL Access
 
 app.get("/u/:shortURL", (req, res) => {
-  const longURL = urlDatabase[req.params.shortURL];
-  res.redirect(longURL);
+  if (urlDatabase[req.params.shortURL]) {
+    res.redirect(urlDatabase[req.params.shortURL].longURL);
+  } else {
+    const errorMessage = 'This short URL does not exist.';
+    res.status(404).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
 });
 
-//Login page that allows users to sign into their account
+//GET Login
 
 app.get('/login', (req, res) => {
-  res.status(200).render('urls_login');
+  if (req.session.userID) {
+    res.redirect('/urls');
+    return;
+  }
+  const templateVars = {user: users[req.session.userID]};
+  res.render('urls_login', templateVars);
 });
 
+// GET Register
 app.get('/register', (req, res) => {
-    res.render('urls_register');
+  if (req.session.userID) {
+    res.redirect('/urls');
+    return;
+  }
+  const templateVars = {user: users[req.session.userID]};
+  res.render('urls_register', templateVars);
 });
 
-// ------------------ Add POST Route --------------------------------
+// ------------------ POST Routing Section----------------------------------------------------
 
 app.post("/urls", (req, res) => {
-  console.log(req.body);  // Log the POST request body to the console
-  res.send("Ok");         // Respond with 'Ok' (we will replace this)
+  if (req.session.userID) {
+    const shortURL = generateRandomString();
+    urlDatabase[shortURL] = {
+      longURL: req.body.longURL,
+      userID: req.session.userID
+    };
+    res.redirect(`/urls/${shortURL}`);
+  } else {
+    const errorMessage = 'You must be logged in to do that.';
+    res.status(401).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
 });
 
 
-// Deleting URLs
+// Deleting URLs POST
 
 app.post('/urls/:shortURL/delete', (req, res) => {
   const shortURL = req.params.shortURL;
-  delete urlDatabase[shortURL];
-  res.redirect("/urls");
+
+  if (req.session.userID  && req.session.userID === urlDatabase[shortURL].userID) {
+    delete urlDatabase[shortURL];
+    res.redirect('/urls');
+  } else {
+    const errorMessage = 'You are not authorized to do that.';
+    res.status(401).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
 });
 
 
-// Edit URLs
+// Edit URLs POST
 
-app.post('/urls/:id', (req, res) => {
-  const shortUrl = req.params.id;
-  const longUrl = req.body.longURL;
+app.post('/urls/:shortURL', (req, res) => {
+  const shortURL = req.params.shortURL;
 
-  urlDatabase[shortUrl] = longUrl;  
-  res.redirect('/urls');
+  if (req.session.userID  && req.session.userID === urlDatabase[shortURL].userID) {
+    urlDatabase[shortURL].longURL = req.body.updatedURL;
+    res.redirect(`/urls`);
+  } else {
+    const errorMessage = 'You are not authorized to do that.';
+    res.status(401).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
 });
 
-// login
+// login POST
 
 app.post('/login', (req, res) => {
-  const email = req.body.email;
- 
-  const user = getUserInfoByEmail(email, users);
-  if (!user) {
-    return res.status(403).send('Please enter your email and password.');
-  }
+  const user = getUserByEmail(req.body.email, users);
 
+  if (user && bcrypt.compareSync(req.body.password, user.password)) {
+    req.session.userID = user.userID;
+    res.redirect('/urls');
+  } else {
+    const errorMessage = 'Login credentials not valid. Please make sure you enter the correct username and password.';
+    res.status(401).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
+});
+
+// Register POST
+
+app.post('/register', (req, res) => {
+  if (req.body.email && req.body.password) {
+
+    if (!getUserByEmail(req.body.email, users)) {
+      const userID = generateRandomString();
+      users[userID] = {
+        userID,
+        email: req.body.email,
+        password: bcrypt.hashSync(req.body.password, 10)
+      };
+      req.session.userID = userID;
+      res.redirect('/urls');
+    } else {
+      const errorMessage = 'Cannot create new account, because this email address is already registered.';
+      res.status(400).render('urls_error', {user: users[req.session.userID], errorMessage});
+    }
+
+  } else {
+    const errorMessage = 'Empty username or password. Please make sure you fill out both fields.';
+    res.status(400).render('urls_error', {user: users[req.session.userID], errorMessage});
+  }
+});
+
+// logout POST
+
+app.post('/logout', (req, res) => {
+  res.clearCookie('session');
+  res.clearCookie('session.sig');
   res.redirect('/urls');
 });
 
-app.post('/register', (req, res) => {
-  res.status(404).send('404!!! Opps!!!');
-});
 
 
 
